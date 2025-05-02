@@ -5,15 +5,17 @@ const fs = require('fs')
 let liked_id = []
 let stopRequested = false;
 let payload = {
-    'av':'',
-    'hs':'',
-    'js':'',
-    'lsd':'',
-    'dtsg':'',
-    'spr':'',
-    'spt':'',
-    'hsi':'',
-    'com':''
+    'av': '',
+    'hs': '',
+    'js': '',
+    'lsd': '',
+    'dtsg': '',
+    'spr': '',
+    'spt': '',
+    'hsi': '',
+    'com': '',
+    'mid': '',
+    'ig_did': ''
 }
 process.on('SIGINT', () => {
     console.log('\n[!] Ctrl + C terdeteksi! Menghentikan proses pengambilan data...');
@@ -108,7 +110,6 @@ async function LikeYou(zhf, kuki) {
             console.log(`[+] Liked ${zhf}`);
         }
     } catch (er) {
-        console.log(er)
         console.log(`[!] Failed ${zhf}`);
     }
 };
@@ -202,7 +203,6 @@ async function DumpData(cookie, postid, next) {
         }
         return;
     } catch (er) {
-        console.error(er)
         return;
     }
 };
@@ -272,6 +272,8 @@ async function Webthreads(params) {
     const jazo = response.data.match(/jazoest=(\d+)",/)?.[1]
     const comet = response.data.match(/__comet_req=(\d+)/)?.[1]
     const hsi = response.data.match(/"hsi":"(\d+)",/)?.[1]
+    const mid = response.data.match(/"machine_id":"(.*?)"/)?.[1];
+    const ig_did = response.data.match(/{"device_id":"([^"]+)"/)?.[1].split('|')?.[2];
     payload.av = av;
     payload.hs = haste;
     payload.js = jazo;
@@ -281,26 +283,198 @@ async function Webthreads(params) {
     payload.spt = spin_t;
     payload.hsi = hsi;
     payload.com = comet;
+    payload.mid = mid;
+    payload.ig_did = ig_did;
+
+    // fs.writeFileSync('tes.txt',response.data)
 };
 
-async function GasLike() {
-    const cookies = await input('[?] Masukin cookie ig : ');
-    await Webthreads(cookies)
+async function GasLike(kukis) {
+    await Webthreads(kukis);
+    const cookies = `ig_did=${payload.ig_did}; mid=${payload.mid}; ps_l=1; ps_n=1; ${kukis}`
     const tautan = await input('[>] Link target : ')
     const data_id = await Postid(tautan)
     await DumpData(cookies, data_id, '')
     const delai = await input('\n[?] Delai berapa detik : ')
     for (const zhafarna of liked_id) {
-        // if (stopRequested) {
-        //     console.log('[x] Proses dihentikan oleh pengguna.');
-        //     return;
-        // }
         await LikeYou(zhafarna, cookies);
         await Zhfna(parseInt(delai) * 1000);
     }
+};
 
+async function LoginCresdinal(username, password, secret) {
+    try {
+        const timestamp = Math.floor(Date.now() / 1000);
+        const response = await axios.post(
+            'https://www.threads.com/api/v1/web/accounts/login/ajax/',
+            new URLSearchParams({
+                'can_threads_signup_with_ig': 'false',
+                'enc_password': `#PWD_BROWSER:0:${timestamp}:${password}`,
+                'optIntoOneTap': 'false',
+                'queryParams': '{}',
+                'stopDeletionNonce': '',
+                'textAppStopDeletionToken': '',
+                'username': username,
+                'jazoest': '22000'
+            }),
+            {
+                headers: {
+                    'accept': '*/*',
+                    'accept-language': 'id,en;q=0.9,en-GB;q=0.8,en-US;q=0.7',
+                    'content-type': 'application/x-www-form-urlencoded;charset=UTF-8',
+                    'origin': 'https://www.threads.com',
+                    'priority': 'u=1, i',
+                    'referer': 'https://www.threads.com/login',
+                    'sec-ch-prefers-color-scheme': 'dark',
+                    'sec-ch-ua': '"Microsoft Edge";v="135", "Not-A.Brand";v="8", "Chromium";v="135"',
+                    'sec-ch-ua-full-version-list': '"Microsoft Edge";v="135.0.3179.98", "Not-A.Brand";v="8.0.0.0", "Chromium";v="135.0.7049.115"',
+                    'sec-ch-ua-mobile': '?0',
+                    'sec-ch-ua-model': '""',
+                    'sec-ch-ua-platform': '"Windows"',
+                    'sec-ch-ua-platform-version': '"19.0.0"',
+                    'sec-fetch-dest': 'empty',
+                    'sec-fetch-mode': 'cors',
+                    'sec-fetch-site': 'same-origin',
+                    'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36 Edg/135.0.0.0',
+                    'x-asbd-id': '359341',
+                    'x-bloks-version-id': 'cf39c6377e026a1760665d37cfc1b31a93ae150e5d202da0aa6d36af9f0749fd',
+                    'x-csrftoken': 'u6olMVHSu9dMczNkWyUMDa',
+                    'x-ig-app-id': '238260118697367',
+                    'x-instagram-ajax': '0',
+                    'cookie': 'ig_did=0468D2FD-3A9E-4CE8-AFB8-F228015E986F; mid=aAuYZgALAAE2MFMJzqC0Hu-LhjwP; ps_l=1; ps_n=1; csrftoken=u6olMVHSu9dMczNkWyUMDa'
+                },
+                validateStatus: function (status) {
+                    return status < 500;
+                }
+            }
+        );
+        const abcd = response.data;
+        if (abcd.two_factor_required) {
+            const identifier = abcd.two_factor_info.two_factor_identifier;
+            const devicesId = abcd.device_id;
+            const verifier_code = await GetVerificationCode(secret.replaceAll(' ', ''));
+            await ValidateA2f(identifier, username, verifier_code, devicesId);
+        } else if (abcd.userId) {
+            function extractCookies(setCookieArray) {
+                return setCookieArray
+                    .map(cookieStr => cookieStr.split(';')[0])
+                    .join('; ');
+            }
+
+            const cookie = extractCookies(response.headers['set-cookie']);
+            await GasLike(cookie);
+        } else {
+            console.log(`[!] Login failed, respon instagram ${abcd}`);
+        }
+
+    } catch (e) {
+        // console.error('Error:', e.message);
+    }
+};
+
+async function GetVerificationCode(secret) {
+    try {
+        console.log(secret)
+        const response = await axios.get(`https://2fa.live/tok/${secret}`, {
+            headers: {
+                'accept': '*/*',
+                'accept-language': 'id,en;q=0.9,en-GB;q=0.8,en-US;q=0.7',
+                'if-none-match': 'W/"12-CKuWeI1TafRaHKZTKHxkNpW7/5E"',
+                'priority': 'u=1, i',
+                'referer': 'https://2fa.live/',
+                'sec-ch-ua': '"Microsoft Edge";v="135", "Not-A.Brand";v="8", "Chromium";v="135"',
+                'sec-ch-ua-mobile': '?0',
+                'sec-ch-ua-platform': '"Windows"',
+                'sec-fetch-dest': 'empty',
+                'sec-fetch-mode': 'cors',
+                'sec-fetch-site': 'same-origin',
+                'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36 Edg/135.0.0.0',
+                'x-requested-with': 'XMLHttpRequest',
+                'cookie': '_gcl_au=1.1.852861105.1740733590; _gid=GA1.2.1940908409.1746159580; _ga_R2SB88WPTD=GS1.1.1746159580.5.0.1746159580.0.0.0; _ga=GA1.1.1238530047.1740733591'
+            }
+        });
+        return response.data.token;
+    } catch (e) {
+        console.log(e)
+    }
 
 }
-console.clear();
-GasLike();
-// Webthreads('ig_did=0468D2FD-3A9E-4CE8-AFB8-F228015E986F; mid=aAuYZgALAAE2MFMJzqC0Hu-LhjwP; ps_l=1; ps_n=1; csrftoken=bogPmK253pienI9L9K4xvfGIm7d2hJbT; ds_user_id=74051264100; sessionid=74051264100%3AkDXnqNVXMUUzzW%3A3%3AAYeZ5qS_7GvyvKN8TFMjfo8tKdoGHu5pDilnMPSXjg')
+async function ValidateA2f(identifier_user, username, verifi_code, devices) {
+    try {
+        const response = await axios.post(
+            'https://www.threads.com/api/v1/web/accounts/login/ajax/two_factor/',
+            new URLSearchParams({
+                'identifier': identifier_user,
+                'queryParams': '{}',
+                'trust_signal': 'false',
+                'username': username,
+                'verification_method': '3',
+                'verificationCode': verifi_code,
+                'deviceId': devices,
+                'jazoest': '22000'
+            }),
+            {
+                headers: {
+                    'accept': '*/*',
+                    'accept-language': 'id,en;q=0.9,en-GB;q=0.8,en-US;q=0.7',
+                    'content-type': 'application/x-www-form-urlencoded;charset=UTF-8',
+                    'origin': 'https://www.threads.com',
+                    'priority': 'u=1, i',
+                    'referer': 'https://www.threads.com/login',
+                    'sec-ch-prefers-color-scheme': 'dark',
+                    'sec-ch-ua': '"Microsoft Edge";v="135", "Not-A.Brand";v="8", "Chromium";v="135"',
+                    'sec-ch-ua-full-version-list': '"Microsoft Edge";v="135.0.3179.98", "Not-A.Brand";v="8.0.0.0", "Chromium";v="135.0.7049.115"',
+                    'sec-ch-ua-mobile': '?0',
+                    'sec-ch-ua-model': '""',
+                    'sec-ch-ua-platform': '"Windows"',
+                    'sec-ch-ua-platform-version': '"19.0.0"',
+                    'sec-fetch-dest': 'empty',
+                    'sec-fetch-mode': 'cors',
+                    'sec-fetch-site': 'same-origin',
+                    'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36 Edg/135.0.0.0',
+                    'x-asbd-id': '359341',
+                    'x-bloks-version-id': 'cf39c6377e026a1760665d37cfc1b31a93ae150e5d202da0aa6d36af9f0749fd',
+                    'x-csrftoken': 'u6olMVHSu9dMczNkWyUMDa',
+                    'x-ig-app-id': '238260118697367',
+                    'x-instagram-ajax': '0',
+                    'cookie': 'ig_did=0468D2FD-3A9E-4CE8-AFB8-F228015E986F; mid=aAuYZgALAAE2MFMJzqC0Hu-LhjwP; ps_l=1; ps_n=1; csrftoken=u6olMVHSu9dMczNkWyUMDa'
+                }
+            }
+        );
+        if (response.data.userId) {
+            function extractCookies(setCookieArray) {
+                return setCookieArray
+                    .map(cookieStr => cookieStr.split(';')[0])
+                    .join('; ');
+            }
+
+            const cookie = extractCookies(response.headers['set-cookie']);
+            await GasLike(cookie);
+        } else {
+            console.log(`[!] kemungkinan terdeteksi spam ${response.data}`);
+        }
+    } catch (e) {
+    }
+};
+
+
+async function First() {
+
+    const username = await input('[?] Username : ')
+    const password = await input('[?] Password : ')
+    const secret_auth = await input('[?] Secret Authentikasi : ')
+    await LoginCresdinal(username,password,secret_auth);
+
+};
+
+console.log(`
+
+    ╦  ┬┬┌─┌─┐┌┬┐
+    ║  │├┴┐├┤  ││
+    ╩═╝┴┴ ┴└─┘─┴┘
+  
+  Like komen thread 1.2
+        
+`);
+
+First();
